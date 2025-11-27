@@ -2,93 +2,122 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from google.cloud import firestore, storage
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
 
 app = FastAPI()
 
-from fastapi.middleware.cors import CORSMiddleware
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],      
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Firestore & Storage clients
+
+
+# ------------ Google Cloud Clients ------------
 firestore_client = firestore.Client()
 storage_client = storage.Client()
 
 BUCKET_NAME = os.environ.get("BUCKET_NAME", "")
 RULES_FILE = os.environ.get("RULES_BLOB_NAME", "crop_rules.json")
+CLIMATE_FILE = "climate_data.json"
+# ----------------------------------------------
 
+
+# ------------ Load Crop Rules ------------
 crop_rules = {}
-
 def load_crop_rules():
-    """Load crop rules JSON from Cloud Storage on startup."""
     global crop_rules
     bucket = storage_client.bucket(BUCKET_NAME)
     blob = bucket.blob(RULES_FILE)
     crop_rules = json.loads(blob.download_as_text())
 
 load_crop_rules()
+# --------------------------------------------------------
+
+
+def load_climate():
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(CLIMATE_FILE)
+    return json.loads(blob.download_as_text())
+
+climate_data = load_climate()
+
 
 class SimulationInput(BaseModel):
-    crop: str
-    rainfall: str  # low, medium, high
-    temperature: str  # low, medium, high
+    crop: str  # ONLY crop now
+
 
 @app.post("/simulate")
 def simulate(input: SimulationInput):
 
     crop = input.crop.lower()
-    rainfall = input.rainfall.lower()
-    temperature = input.temperature.lower()
+
+    # ---------------- REAL CLIMATE DATA ----------------
+    rainfall = climate_data["avg_rainfall"]                  
+    temperature = climate_data["avg_temperature_celsius"]    
+    ndvi = climate_data["avg_ndvi"]                          
+    # ----------------------------------------------------
 
     base_yield = crop_rules.get(crop, {}).get("base_yield", 50)
 
-    # Simple logic
+    # -------- Yield Logic Using REAL Climate --------
     modifier = 0
 
-    if rainfall == "low":
-        modifier -= 15
-    elif rainfall == "medium":
-        modifier += 0
-    elif rainfall == "high":
+    # Rainfall impact
+    if rainfall < 50:
+        modifier -= 20
+    elif rainfall < 100:
+        modifier += 5
+    else:
         modifier += 10
 
-    if temperature == "low":
-        modifier -= 5
-    elif temperature == "medium":
-        modifier += 10
-    elif temperature == "high":
+    # Temperature impact
+    if temperature < 20:
         modifier -= 10
+    elif temperature < 30:
+        modifier += 10
+    else:
+        modifier -= 5
+
+    # NDVI (strong predictor of vegetation health)
+    modifier += (ndvi * 20)
+    # ------------------------------------------------
 
     yield_score = max(0, min(100, base_yield + modifier))
 
-    # Advice text
+    # Simple advice
     if yield_score >= 75:
-        advice = "High yield expected. Maintain current practices and monitor pests."
+        advice = "High yield expected. Conditions are favorable."
     elif yield_score >= 50:
-        advice = "Moderate yield expected. Optimize irrigation and nutrient management."
+        advice = "Moderate yield expected. Monitor irrigation and nutrients."
     else:
-        advice = "Low yield expected. Consider drought/heat-resistant crops."
+        advice = "Low yield expected. Climate stress detected — consider adjustments."
 
-    # Save to Firestore
+    # Save run to Firestore
     firestore_client.collection("simulations").add({
         "crop": crop,
+        "yield_score": yield_score,
         "rainfall": rainfall,
         "temperature": temperature,
-        "yield_score": yield_score,
+        "ndvi": ndvi,
         "advice": advice,
         "timestamp": datetime.utcnow()
     })
 
     return {
         "yield_score": yield_score,
-        "advice": advice
+        "advice": advice,
+        "climate_used": {
+            "rainfall": rainfall,
+            "temperature": temperature,
+            "ndvi": ndvi
+        }
     }
+
 
 @app.get("/health")
 def health():
