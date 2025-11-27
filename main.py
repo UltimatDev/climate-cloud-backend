@@ -7,44 +7,41 @@ import os
 
 app = FastAPI()
 
-# Initialize Firestore & Storage clients
+# Firestore & Storage clients
 firestore_client = firestore.Client()
 storage_client = storage.Client()
 
 BUCKET_NAME = os.environ.get("BUCKET_NAME", "")
-RULES_BLOB_NAME = os.environ.get("RULES_BLOB_NAME", "crop_rules.json")
+RULES_FILE = os.environ.get("RULES_BLOB_NAME", "crop_rules.json")
 
-# Load rules from Cloud Storage at startup
 crop_rules = {}
 
-def load_rules():
+def load_crop_rules():
+    """Load crop rules JSON from Cloud Storage on startup."""
     global crop_rules
     bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(RULES_BLOB_NAME)
-    data = blob.download_as_text()
-    crop_rules = json.loads(data)
+    blob = bucket.blob(RULES_FILE)
+    crop_rules = json.loads(blob.download_as_text())
 
-load_rules()
-
+load_crop_rules()
 
 class SimulationInput(BaseModel):
     crop: str
-    rainfall: str  # "low", "medium", "high"
-    temperature: str  # "low", "medium", "high"
-
+    rainfall: str  # low, medium, high
+    temperature: str  # low, medium, high
 
 @app.post("/simulate")
 def simulate(input: SimulationInput):
+
     crop = input.crop.lower()
     rainfall = input.rainfall.lower()
     temperature = input.temperature.lower()
 
     base_yield = crop_rules.get(crop, {}).get("base_yield", 50)
 
-    # Very simple dummy logic
+    # Simple logic
     modifier = 0
 
-    # Rainfall effect
     if rainfall == "low":
         modifier -= 15
     elif rainfall == "medium":
@@ -52,7 +49,6 @@ def simulate(input: SimulationInput):
     elif rainfall == "high":
         modifier += 10
 
-    # Temperature effect
     if temperature == "low":
         modifier -= 5
     elif temperature == "medium":
@@ -62,17 +58,16 @@ def simulate(input: SimulationInput):
 
     yield_score = max(0, min(100, base_yield + modifier))
 
-    # Generate simple advice
+    # Advice text
     if yield_score >= 75:
         advice = "High yield expected. Maintain current practices and monitor pests."
     elif yield_score >= 50:
-        advice = "Moderate yield expected. Consider optimizing irrigation and fertilization."
+        advice = "Moderate yield expected. Optimize irrigation and nutrient management."
     else:
-        advice = "Low yield expected. Explore drought/heat-resistant varieties and adjust planting schedule."
+        advice = "Low yield expected. Consider drought/heat-resistant crops."
 
     # Save to Firestore
-    doc_ref = firestore_client.collection("simulations").document()
-    doc_ref.set({
+    firestore_client.collection("simulations").add({
         "crop": crop,
         "rainfall": rainfall,
         "temperature": temperature,
@@ -85,7 +80,6 @@ def simulate(input: SimulationInput):
         "yield_score": yield_score,
         "advice": advice
     }
-
 
 @app.get("/health")
 def health():
