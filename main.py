@@ -50,16 +50,15 @@ climate_data = load_climate()
 class SimulationInput(BaseModel):
     crop: str  # ONLY crop now
 
-
 @app.post("/simulate")
 def simulate(input: SimulationInput):
 
     crop = input.crop.lower()
 
     # ---------------- REAL CLIMATE DATA ----------------
-    rainfall = climate_data["avg_rainfall"]                  
-    temperature = climate_data["avg_temperature_celsius"]    
-    ndvi = climate_data["avg_ndvi"]                          
+    rainfall = climate_data["avg_rainfall"]                  # mm
+    temperature = climate_data["avg_temperature_celsius"]    # °C
+    ndvi = climate_data["avg_ndvi"]                          # 0–1
     # ----------------------------------------------------
 
     base_yield = crop_rules.get(crop, {}).get("base_yield", 50)
@@ -67,7 +66,7 @@ def simulate(input: SimulationInput):
     # -------- Yield Logic Using REAL Climate --------
     modifier = 0
 
-    # Rainfall impact
+    # Use real rainfall
     if rainfall < 50:
         modifier -= 20
     elif rainfall < 100:
@@ -75,7 +74,7 @@ def simulate(input: SimulationInput):
     else:
         modifier += 10
 
-    # Temperature impact
+    # Use real temperature
     if temperature < 20:
         modifier -= 10
     elif temperature < 30:
@@ -83,22 +82,22 @@ def simulate(input: SimulationInput):
     else:
         modifier -= 5
 
-    # NDVI (strong predictor of vegetation health)
-    modifier += (ndvi * 20)
+    # NDVI contribution (scaled)
+    modifier += ndvi * 20
     # ------------------------------------------------
 
     yield_score = max(0, min(100, base_yield + modifier))
 
-    # Simple advice
+    # Advice
     if yield_score >= 75:
-        advice = "High yield expected. Conditions are favorable."
+        advice = "High yield expected. Climate conditions are favorable."
     elif yield_score >= 50:
-        advice = "Moderate yield expected. Monitor irrigation and nutrients."
+        advice = "Moderate yield expected. Monitor field conditions closely."
     else:
-        advice = "Low yield expected. Climate stress detected — consider adjustments."
+        advice = "Low yield expected. Environmental stress detected."
 
-    # Save run to Firestore
-    firestore_client.collection("simulations").add({
+    # SAVE TO FIRESTORE
+    firestore_client.collection("experimentations").add({
         "crop": crop,
         "yield_score": yield_score,
         "rainfall": rainfall,
