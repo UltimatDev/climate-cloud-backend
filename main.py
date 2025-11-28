@@ -88,9 +88,10 @@ def simulate(input: SimulationInput):
     # NDVI contribution (scaled)
     modifier += ndvi * 20
     # ------------------------------------------------
-    
+   
+
     #yield_score = max(0, min(100, base_yield + modifier))
-    yield_score = get_ml_prediction(rainfall, temperature, ndvi)
+    yield_score = get_ml_prediction(rainfall, temperature, ndvi,crop)
 
     # Advice
     if yield_score >= 75:
@@ -123,12 +124,18 @@ def simulate(input: SimulationInput):
 import requests
 
 ML_URL = "https://climate-ml-service-309428167154.asia-south2.run.app/predict"
-
-def get_ml_prediction(rainfall, temperature, ndvi):
+CROP_CODES = {
+    "rice": 1,
+    "wheat": 2,
+    "maize": 0,
+    
+}
+def get_ml_prediction(rainfall, temperature, ndvi,crop):
     body = {
         "rainfall_mm": rainfall,
         "temperature_c": temperature,
-        "ndvi": ndvi
+        "ndvi": ndvi,
+        "crop_code": CROP_CODES.get(crop,0)
     }
     res = requests.post(ML_URL, json=body)
     return res.json()["predicted_yield"]
