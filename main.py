@@ -90,7 +90,7 @@ def simulate(input: SimulationInput):
     # ------------------------------------------------
    
 
-    #yield_score = max(0, min(100, base_yield + modifier))
+    predicted_yield = max(0, min(100, base_yield + modifier))
     yield_score = get_ml_prediction(rainfall, temperature, ndvi,crop)
 
     # Advice
@@ -114,6 +114,7 @@ def simulate(input: SimulationInput):
 
     return {
         "yield_score": yield_score,
+        "predicted_yield": predicted_yield,
         "advice": advice,
         "climate_used": {
             "rainfall": rainfall,
