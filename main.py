@@ -85,8 +85,9 @@ def simulate(input: SimulationInput):
     # NDVI contribution (scaled)
     modifier += ndvi * 20
     # ------------------------------------------------
-
-    yield_score = max(0, min(100, base_yield + modifier))
+    
+    #yield_score = max(0, min(100, base_yield + modifier))
+    yield_score = get_ml_prediction(rainfall, temperature, ndvi)
 
     # Advice
     if yield_score >= 75:
@@ -116,6 +117,18 @@ def simulate(input: SimulationInput):
             "ndvi": ndvi
         }
     }
+import requests
+
+ML_URL = "https://climate-ml-service-309428167154.europe-west1.run.app/predict"
+
+def get_ml_prediction(rainfall, temperature, ndvi):
+    body = {
+        "rainfall_mm": rainfall,
+        "temperature_c": temperature,
+        "ndvi": ndvi
+    }
+    res = requests.post(ML_URL, json=body)
+    return res.json()["predicted_yield"]
 
 
 @app.get("/health")
