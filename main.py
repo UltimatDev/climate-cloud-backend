@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
+import requests
 
 app = FastAPI()
 
@@ -15,7 +16,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+@app.options("/{path:path}")
+def preflight_handler(path: str):
+    return {}
 
 # ------------ Google Cloud Clients ------------
 firestore_client = firestore.Client()
