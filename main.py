@@ -119,7 +119,7 @@ def simulate(input: SimulationInput):
     }
 import requests
 
-ML_URL = "https://climate-ml-service-309428167154.europe-west1.run.app/predict"
+ML_URL = "https://climate-ml-service-309428167154.asia-south2.run.app/predict"
 
 def get_ml_prediction(rainfall, temperature, ndvi):
     body = {
